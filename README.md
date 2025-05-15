@@ -1,2 +1,2 @@
 # solanaday
-solanadat hackathon
+solanaday hackathon
