@@ -10,7 +10,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Connection, PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js"
+import { Connection, PublicKey, clusterApiUrl, LAMPORTS_PER_SOL, Transaction } from "@solana/web3.js"
+import { EscrowProgramClient } from "@/lib/escrow-program"
 
 declare global {
   interface Window {
@@ -20,6 +21,8 @@ declare global {
       publicKey: any
       on: (event: string, callback: () => void) => void
       off: (event: string, callback: () => void) => void
+      signTransaction: (transaction: Transaction) => Promise<Transaction>
+      signAllTransactions: (transactions: Transaction[]) => Promise<Transaction[]>
     }
   }
 }
@@ -31,6 +34,7 @@ type WalletContextType = {
   disconnect: () => void
   openWalletModal: () => void
   balance: string | null
+  escrowClient: EscrowProgramClient | null
 }
 
 const WalletContext = createContext<WalletContextType>({
@@ -40,8 +44,8 @@ const WalletContext = createContext<WalletContextType>({
   disconnect: () => {},
   openWalletModal: () => {},
   balance: null,
+  escrowClient: null,
 })
-
 export function WalletProvider({ children }: { children: ReactNode }) {
   const [connected, setConnected] = useState(false)
   const [address, setAddress] = useState<string | null>(null)
@@ -49,6 +53,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [showWalletModal, setShowWalletModal] = useState(false)
   const [connecting, setConnecting] = useState(false)
   const [isSolflareInstalled, setIsSolflareInstalled] = useState(false)
+  const [escrowClient, setEscrowClient] = useState<EscrowProgramClient | null>(null)
 
   // Check if Solflare is installed
   useEffect(() => {
@@ -186,6 +191,26 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem("walletBalance")
   }
 
+  useEffect(() => {
+    if (connected && window.solflare && window.solflare.publicKey) {
+      try {
+        console.log("Initializing escrow client...")
+        const connection = new Connection(clusterApiUrl("devnet"), "confirmed")
+        const client = new EscrowProgramClient(connection)
+        setEscrowClient(client)
+        console.log("Escrow client initialized successfully")
+      } catch (error) {
+        console.error("Failed to initialize escrow client:", error)
+      }
+    } else {
+      console.log("Not initializing escrow client because:", {
+        connected,
+        solflareExists: !!window.solflare,
+        publicKeyExists: window.solflare ? !!window.solflare.publicKey : false
+      })
+    }
+  }, [connected])
+
   return (
     <WalletContext.Provider
       value={{
@@ -195,6 +220,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         disconnect,
         openWalletModal,
         balance,
+        escrowClient
       }}
     >
       {children}
@@ -264,7 +290,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     </WalletContext.Provider>
   )
 }
-
 export const useWallet = () => useContext(WalletContext)
 
 function SolflareIcon() {
