@@ -8,9 +8,15 @@ import {
   Keypair,
 } from '@solana/web3.js';
 
+// Make sure you're using this
+import { useEscrowProgram } from '@/hooks/use-escrow-program'
+
+// And not this
+// import { useEscrowSimple } from '@/hooks/use-escrow-simple'
+
 // This is a placeholder program ID for testing
 // Replace with your actual program ID when you have it
-const ESCROW_PROGRAM_ID = new PublicKey('11111111111111111111111111111111');
+const ESCROW_PROGRAM_ID = new PublicKey('HQZSzzfTzuk8KUkrzkBQaKa6xXCRXGzum2o18s2gr8rP');
 
 export class EscrowProgramClient {
   connection: Connection;
@@ -34,7 +40,6 @@ export class EscrowProgramClient {
     console.log("Generated escrow account:", escrowAccount.publicKey.toString());
     
     // Calculate space needed for the escrow account data
-    // This should match your Rust struct size
     const space = 1 + 32 + 8; // is_initialized (1) + pubkey (32) + amount (8)
     
     // Calculate rent exemption amount
@@ -43,6 +48,13 @@ export class EscrowProgramClient {
     
     // Create transaction
     const transaction = new Transaction();
+    
+    // IMPORTANT: Set the fee payer explicitly
+    transaction.feePayer = payer;
+    
+    // Get recent blockhash BEFORE adding instructions
+    const { blockhash } = await this.connection.getLatestBlockhash();
+    transaction.recentBlockhash = blockhash;
     
     // Add instruction to create account
     transaction.add(
@@ -56,7 +68,6 @@ export class EscrowProgramClient {
     );
     
     // Add instruction to initialize the escrow
-    // This should match your program's instruction format
     const amountInLamports = Math.floor(amount * LAMPORTS_PER_SOL);
     const data = Buffer.alloc(9); // 1 byte for instruction index + 8 bytes for amount
     data.writeUInt8(0, 0); // Instruction index 0 for initialize
@@ -72,11 +83,6 @@ export class EscrowProgramClient {
         data,
       })
     );
-    
-    // Get recent blockhash
-    const { blockhash } = await this.connection.getLatestBlockhash();
-    transaction.recentBlockhash = blockhash;
-    transaction.feePayer = payer;
     
     // Sign with the escrow account
     transaction.partialSign(escrowAccount);
@@ -97,7 +103,7 @@ export class EscrowProgramClient {
       console.log("Transaction confirmed!");
       
       return {
-        escrowAccount: escrowAccount.publicKey,
+        escrowAccount: escrowAccount.publicKey.toString(),
         signature,
       };
     } catch (error) {

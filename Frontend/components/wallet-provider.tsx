@@ -11,7 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Connection, PublicKey, clusterApiUrl, LAMPORTS_PER_SOL, Transaction } from "@solana/web3.js"
-import { EscrowProgramClient } from "@/lib/escrow-program"
+import { EscrowProgramClient } from "../lib/escrow-program"
 
 declare global {
   interface Window {

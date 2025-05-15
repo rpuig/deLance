@@ -9,8 +9,15 @@ export function useEscrowProgram() {
   
   // Create a new escrow
   async function createEscrow(amount: number) {
-    if (!connected || !address || !window.solflare || !escrowClient) {
-      setError('Wallet not connected or escrow client not initialized')
+    console.log("createEscrow called with amount:", amount)
+    
+    if (!connected || !address) {
+      setError('Wallet not connected or address not available')
+      return null
+    }
+    
+    if (!escrowClient) {
+      setError('Escrow client not initialized')
       return null
     }
     
@@ -18,17 +25,29 @@ export function useEscrowProgram() {
     setError(null)
     
     try {
+      // Create a PublicKey from the address string
+      const publicKey = new PublicKey(address)
+      console.log("Using publicKey:", publicKey.toString())
+      
       const result = await escrowClient.createEscrow(
-        window.solflare.publicKey,
+        publicKey,
         amount,
         async (transaction: Transaction) => {
-          return await window.solflare.signTransaction(transaction)
+          if (!window.solflare || !window.solflare.signTransaction) {
+            throw new Error('Solflare wallet not available for signing')
+          }
+          
+          console.log("Signing transaction")
+          const signed = await window.solflare.signTransaction(transaction)
+          console.log("Transaction signed successfully")
+          return signed
         }
       )
       
+      console.log("Escrow created successfully:", result)
       return result
     } catch (err) {
-      console.error('Error creating escrow:', err)
+      console.error("Error creating escrow:", err)
       setError(err instanceof Error ? err.message : 'Unknown error')
       return null
     } finally {
