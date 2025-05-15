@@ -192,7 +192,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
-    if (connected && window.solflare && window.solflare.publicKey) {
+    if (connected && address) {
       try {
         console.log("Initializing escrow client...")
         const connection = new Connection(clusterApiUrl("devnet"), "confirmed")
@@ -203,13 +203,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         console.error("Failed to initialize escrow client:", error)
       }
     } else {
-      console.log("Not initializing escrow client because:", {
-        connected,
-        solflareExists: !!window.solflare,
-        publicKeyExists: window.solflare ? !!window.solflare.publicKey : false
-      })
+      setEscrowClient(null)
     }
-  }, [connected])
+  }, [connected, address])
 
   return (
     <WalletContext.Provider
