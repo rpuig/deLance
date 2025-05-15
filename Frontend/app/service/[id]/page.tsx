@@ -33,7 +33,7 @@ export default function ServiceDetail() {
     price: "2 SOL",
     deliveryTime: "3-5 días",
     rating: 4.8,
-    reviews: 24,
+    reviewCount: 24,
     completedJobs: 47,
     portfolio: [
       { id: 1, title: "Logo para Startup", image: "/placeholder.svg?height=200&width=300" },
@@ -106,7 +106,7 @@ export default function ServiceDetail() {
                 Por: {service.freelancer} •
                 <span className="inline-flex items-center ml-2">
                   <Star className="h-4 w-4 fill-yellow-400 text-yellow-400 mr-1" />
-                  {service.rating} ({service.reviews} reseñas)
+                  {service.rating} ({service.reviewCount} reseñas)
                 </span>
               </CardDescription>
             </CardHeader>
