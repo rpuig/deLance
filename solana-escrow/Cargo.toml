@@ -1,0 +1,11 @@
+[package]
+name = "solana-escrow"
+version = "0.1.0"
+edition = "2021"
+[lib]
+name = "solana_escrow"
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+solana-program = "1.16.2"
+borsh = "0.9.3"

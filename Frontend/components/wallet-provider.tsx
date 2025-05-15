@@ -1,4 +1,4 @@
-"use client";
+"use client"
 
 import { createContext, useContext, type ReactNode, useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
@@ -12,20 +12,15 @@ import {
 } from "@/components/ui/dialog"
 import { Connection, PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js"
 
-// Definir los tipos para la API de Solflare
-type SolflareWallet = {
-  connect: () => Promise<{ publicKey: PublicKey }>
-  disconnect: () => Promise<void>
-  publicKey: PublicKey | null
-  isConnected: boolean
-  on: (event: string, callback: (...args: any[]) => void) => void
-  off: (event: string, callback: (...args: any[]) => void) => void
-}
-
-// Extender la interfaz Window para incluir Solflare
 declare global {
   interface Window {
-    solflare?: SolflareWallet
+    solflare: {
+      connect: () => Promise<void>
+      disconnect: () => Promise<void>
+      publicKey: any
+      on: (event: string, callback: () => void) => void
+      off: (event: string, callback: () => void) => void
+    }
   }
 }
 
@@ -47,9 +42,6 @@ const WalletContext = createContext<WalletContextType>({
   balance: null,
 })
 
-// Endpoint de RPC de Solana (usando el endpoint público de Solana Devnet para desarrollo)
-const SOLANA_RPC_ENDPOINT = "https://api.testnet.solana.com"
-
 export function WalletProvider({ children }: { children: ReactNode }) {
   const [connected, setConnected] = useState(false)
   const [address, setAddress] = useState<string | null>(null)
@@ -58,123 +50,120 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [connecting, setConnecting] = useState(false)
   const [isSolflareInstalled, setIsSolflareInstalled] = useState(false)
 
-  // Comprobar si Solflare está instalado
+  // Check if Solflare is installed
   useEffect(() => {
-    const checkSolflareInstalled = () => {
-      const isSolflareAvailable = window.solflare && window.solflare.isConnected !== undefined
-      setIsSolflareInstalled(!!isSolflareAvailable)
+    const checkSolflare = () => {
+      setIsSolflareInstalled(!!window.solflare)
     }
-
-    checkSolflareInstalled()
-    // También verificar cuando la ventana se enfoca, por si el usuario instala la extensión mientras la página está abierta
-    window.addEventListener("focus", checkSolflareInstalled)
-    return () => window.removeEventListener("focus", checkSolflareInstalled)
+    
+    // Check immediately
+    if (typeof window !== 'undefined') {
+      checkSolflare()
+    }
+    
+    // Also check after a delay to handle slow loading extensions
+    const timer = setTimeout(checkSolflare, 1000)
+    return () => clearTimeout(timer)
   }, [])
 
-  // Comprobar si ya hay una conexión activa al cargar la página
+  // Restore connection state on page load
   useEffect(() => {
-    const checkConnection = async () => {
-      if (window.solflare && window.solflare.isConnected) {
-        try {
-          // Si Solflare ya está conectado, obtener la clave pública
-          const publicKey = window.solflare.publicKey
-          if (publicKey) {
-            setAddress(publicKey.toString())
-            setConnected(true)
-            await fetchBalance(publicKey.toString())
-          }
-        } catch (error) {
-          console.error("Error al verificar la conexión existente:", error)
-        }
-      }
-    }
+    const isConnected = localStorage.getItem("walletConnected") === "true"
+    const savedAddress = localStorage.getItem("walletAddress")
+    const savedBalance = localStorage.getItem("walletBalance")
 
-    checkConnection()
-  }, [])
-
-  // Configurar listeners para eventos de Solflare
-  useEffect(() => {
-    if (!window.solflare) return
-
-    const handleConnect = async (publicKey: PublicKey) => {
-      setAddress(publicKey.toString())
+    if (isConnected && savedAddress) {
       setConnected(true)
-      await fetchBalance(publicKey.toString())
-    }
-
-    const handleDisconnect = () => {
-      setAddress(null)
-      setBalance(null)
-      setConnected(false)
-    }
-
-    const handleAccountChange = async (publicKey: PublicKey) => {
-      setAddress(publicKey.toString())
-      await fetchBalance(publicKey.toString())
-    }
-
-    // Añadir event listeners
-    window.solflare.on("connect", handleConnect)
-    window.solflare.on("disconnect", handleDisconnect)
-    window.solflare.on("accountChanged", handleAccountChange)
-
-    // Limpiar event listeners al desmontar
-    return () => {
-      if (window.solflare) {
-        window.solflare.off("connect", handleConnect)
-        window.solflare.off("disconnect", handleDisconnect)
-        window.solflare.off("accountChanged", handleAccountChange)
-      }
+      setAddress(savedAddress)
+      setBalance(savedBalance)
     }
   }, [])
-
-  // Función para obtener el balance de SOL
-  const fetchBalance = async (address: string) => {
-    try {
-      const connection = new Connection(SOLANA_RPC_ENDPOINT, "confirmed")
-      const publicKey = new PublicKey(address)
-      const balanceInLamports = await connection.getBalance(publicKey)
-      const balanceInSOL = (balanceInLamports / LAMPORTS_PER_SOL).toFixed(2)
-      setBalance(balanceInSOL)
-      return balanceInSOL
-    } catch (error) {
-      console.error("Error al obtener el balance:", error)
-      setBalance("0.00")
-      return "0.00"
-    }
-  }
 
   const openWalletModal = () => {
     setShowWalletModal(true)
   }
 
   const connectSolflare = async () => {
-    if (!window.solflare) {
-      alert("Solflare no está instalado. Por favor, instala la extensión Solflare para continuar.")
-      return
-    }
-
     try {
       setConnecting(true)
-
-      // Conectar con Solflare
-      const { publicKey } = await window.solflare.connect()
-
-      if (publicKey) {
-        const addressString = publicKey.toString()
-        setAddress(addressString)
-        setConnected(true)
-
-        // Obtener el balance
-        await fetchBalance(addressString)
+      
+      // Check if Solflare is installed
+      if (!window.solflare) {
+        alert("Solflare wallet not found! Please install the Solflare extension.")
+        setConnecting(false)
+        return
       }
-
-      setShowWalletModal(false)
+      
+      try {
+        // Connect to Solflare
+        await window.solflare.connect()
+        
+        // Get the wallet address - make sure we're using the actual Solflare public key
+        const publicKeyString = window.solflare.publicKey.toString()
+        console.log("Connected to Solflare wallet:", publicKeyString) // Debug log
+        
+        // Set a placeholder balance initially
+        let solBalance = "--"
+        
+        // Try to get the wallet balance
+        try {
+          const connection = new Connection("https://api.devnet.solana.com", "confirmed")
+          const publicKey = window.solflare.publicKey
+          const balance = await connection.getBalance(publicKey)
+          solBalance = (balance / LAMPORTS_PER_SOL).toFixed(2)
+        } catch (balanceError) {
+          console.error("Error fetching balance:", balanceError)
+          // Continue with connection even if balance fetch fails
+        }
+        
+        // Make sure we're setting the actual address from Solflare
+        setAddress(publicKeyString)
+        setBalance(solBalance)
+        setConnected(true)
+        
+        // Save the actual address to localStorage
+        localStorage.setItem("walletConnected", "true")
+        localStorage.setItem("walletAddress", publicKeyString) // Use the actual Solflare address
+        localStorage.setItem("walletBalance", solBalance) // Use the actual balance
+        
+        setShowWalletModal(false)
+      } catch (error) {
+        console.error("Error connecting to Solflare:", error)
+        alert("Failed to connect to Solflare wallet.")
+      }
     } catch (error) {
       console.error("Error al conectar con Solflare:", error)
-      alert("Error al conectar con Solflare. Por favor, intenta de nuevo.")
     } finally {
       setConnecting(false)
+    }
+  }
+  
+  // Separate function to fetch balance
+  const fetchBalance = async (publicKey: PublicKey): Promise<string | null> => {
+    try {
+      // Try multiple RPC endpoints in case one fails
+      const endpoints = [
+        "https://api.devnet.solana.com",
+        "https://api.mainnet-beta.solana.com",
+        "https://solana-api.projectserum.com"
+      ]
+      
+      for (const endpoint of endpoints) {
+        try {
+          const connection = new Connection(endpoint, "confirmed")
+          const balance = await connection.getBalance(publicKey)
+          return (balance / LAMPORTS_PER_SOL).toFixed(2)
+        } catch (e) {
+          console.warn(`Failed to connect to ${endpoint}:`, e)
+          // Try the next endpoint
+        }
+      }
+      
+      // If all endpoints fail
+      return null
+    } catch (error) {
+      console.error("Error fetching balance:", error)
+      return null
     }
   }
 
@@ -183,13 +172,18 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       try {
         await window.solflare.disconnect()
       } catch (error) {
-        console.error("Error al desconectar:", error)
+        console.error("Error disconnecting from Solflare:", error)
       }
     }
-
+    
     setAddress(null)
     setBalance(null)
     setConnected(false)
+    
+    // Clear localStorage
+    localStorage.removeItem("walletConnected")
+    localStorage.removeItem("walletAddress")
+    localStorage.removeItem("walletBalance")
   }
 
   return (
@@ -277,11 +271,19 @@ function SolflareIcon() {
   return (
     <svg width="24" height="24" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path
-        d="M107.1 50.3L69 12.1C65.3 8.4 59.6 8.4 55.9 12.1L12.1 55.9C8.4 59.6 8.4 65.3 12.1 69L50.3 107.1C54 110.8 59.7 110.8 63.4 107.1L107.1 63.4C110.8 59.7 110.8 54 107.1 50.3Z"
-        fill="#00A9E0"
+        d="M107.1 50.3L69 12.1C65.3 8.4 59.4 8.4 55.7 12.1L17.6 50.3C13.9 54 13.9 59.9 17.6 63.6L55.7 101.8C59.4 105.5 65.3 105.5 69 101.8L107.1 63.6C110.9 59.9 110.9 54 107.1 50.3Z"
+        fill="#FF9E00"
       />
       <path
-        d="M33.5 66.5L66.5 33.5C69.1 30.9 74.5 30.9 77.1 33.5L94.7 51.1C97.3 53.7 97.3 59.1 94.7 61.7L61.7 94.7C59.1 97.3 53.7 97.3 51.1 94.7L33.5 77.1C30.9 74.5 30.9 69.1 33.5 66.5Z"
+        d="M62.3 19.7L23.5 58.5C21.6 60.4 21.6 63.5 23.5 65.4L62.3 104.2C64.2 106.1 67.3 106.1 69.2 104.2L108 65.4C109.9 63.5 109.9 60.4 108 58.5L69.2 19.7C67.3 17.8 64.2 17.8 62.3 19.7Z"
+        fill="#FFC700"
+      />
+      <path
+        d="M73.3 65.8L62.4 76.7C61.9 77.2 61.1 77.2 60.6 76.7L49.7 65.8C49.2 65.3 49.2 64.5 49.7 64L60.6 53.1C61.1 52.6 61.9 52.6 62.4 53.1L73.3 64C73.8 64.5 73.8 65.3 73.3 65.8Z"
+        fill="#FFDD6C"
+      />
+      <path
+        d="M73.3 65.8L62.4 76.7C61.9 77.2 61.1 77.2 60.6 76.7L49.7 65.8C49.2 65.3 49.2 64.5 49.7 64L60.6 53.1C61.1 52.6 61.9 52.6 62.4 53.1L73.3 64C73.8 64.5 73.8 65.3 73.3 65.8Z"
         fill="white"
       />
     </svg>
