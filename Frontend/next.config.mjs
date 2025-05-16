@@ -1,14 +1,7 @@
-/** @type {import('next').NextConfig} */
-const nextConfig = {
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-  typescript: {
-    ignoreBuildErrors: true,
-  },
-  images: {
-    unoptimized: true,
-  },
-}
+// next.config.mjs
+import pkg from './next-i18next.config.js';  // Usamos la importación por defecto
+const { i18n } = pkg;  // Desestructuramos i18n del objeto importado
 
-export default nextConfig
+export default {
+  i18n,  // Exportamos la configuración de i18n
+};

@@ -50,7 +50,7 @@ export function Navbar() {
 
     return [
       { href: "/", label: "Inicio", icon: <Home className="h-5 w-5" /> },
-      { href: "/connect", label: "Conectar Wallet", icon: <User className="h-5 w-5" /> },
+  
     ]
   }
 

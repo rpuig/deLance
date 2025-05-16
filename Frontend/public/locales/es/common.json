@@ -1,0 +1,68 @@
+{
+    "connectWallet": "Conectar Wallet",
+    "myWallet": "Mi Wallet",
+    "address": "Dirección:",
+    "balance": "Balance:",
+    "disconnect": "Desconectar",
+    "sol": "SOL",
+    "walletButtonText": {
+      "connected": "{address} - {balance} SOL",
+      "disconnected": "Conectar Wallet"
+    },
+    "footer": {
+      "copyright": "&copy; 2025 deLance. Todos los derechos reservados.",
+      "terms": "Términos",
+      "privacy": "Privacidad"
+    },
+    "navbar": {
+      "home": "Inicio",
+      "dashboard": "Dashboard",
+      "myServices": "Mis Servicios",
+      "searchServices": "Buscar Servicios",
+      "logout": "Salir",
+      "roleChange": "Cambiar rol",
+      "mobileMenu": {
+        "open": "Abrir menú",
+        "close": "Cerrar menú"
+      }
+    },
+    "escrowTest": {
+      "header": "Escrow Test",
+      "walletStatus": "Estado de Wallet:",
+      "solflareStatus": "Estado de Solflare:",
+      "amount": "Cantidad (SOL)",
+      "createEscrow": "Crear Escrow",
+      "result": "Resultado:",
+      "error": "Error:",
+      "connectWalletError": "Error: No se pudo conectar la Wallet.",
+      "solflarePublicKeyError": "Error: Solflare o publicKey no disponible. Intenta reconectar tu wallet."
+    },
+    "siteLayout": {
+      "footer": {
+        "copyright": "&copy; 2025 deLance. Todos los derechos reservados.",
+        "terms": "Términos",
+        "privacy": "Privacidad"
+      }
+    },
+    "walletButton": {
+      "walletStatus": "Estado de Wallet:",
+      "connectWallet": "Conectar Wallet",
+      "myWallet": "Mi Wallet",
+      "address": "Dirección",
+      "balance": "Balance",
+      "disconnect": "Desconectar"
+    },
+    "navbar": {
+      "home": "Inicio",
+      "dashboard": "Dashboard",
+      "myServices": "Mis Servicios",
+      "searchServices": "Buscar Servicios",
+      "logout": "Salir",
+      "roleChange": "Cambiar rol",
+      "mobileMenu": {
+        "open": "Abrir menú",
+        "close": "Cerrar menú"
+      }
+    }
+  }
+  
