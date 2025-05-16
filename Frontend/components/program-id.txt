@@ -1,3 +1,0 @@
-
-Program Id                                   | Slot      | Authority                                    | Balance
-HQZSzzfTzuk8KUkrzkBQaKa6xXCRXGzum2o18s2gr8rP | 381076275 | 4Sj72qywpVijyNPyNB4Atuq6VhVvvkW9nZaTMBoruEmn | 0.32331288 SOL

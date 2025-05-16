@@ -35,6 +35,7 @@ type WalletContextType = {
   openWalletModal: () => void
   balance: string | null
   escrowClient: EscrowProgramClient | null
+  signTransaction: (transaction: Transaction) => Promise<Transaction>
 }
 
 const WalletContext = createContext<WalletContextType>({
@@ -45,7 +46,9 @@ const WalletContext = createContext<WalletContextType>({
   openWalletModal: () => {},
   balance: null,
   escrowClient: null,
+  signTransaction: async () => { throw new Error("Wallet not connected") }
 })
+
 export function WalletProvider({ children }: { children: ReactNode }) {
   const [connected, setConnected] = useState(false)
   const [address, setAddress] = useState<string | null>(null)
@@ -55,10 +58,37 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [isSolflareInstalled, setIsSolflareInstalled] = useState(false)
   const [escrowClient, setEscrowClient] = useState<EscrowProgramClient | null>(null)
 
+  // Define the signTransaction function that will be exposed in the context
+  const signTransaction = async (transaction: Transaction): Promise<Transaction> => {
+    console.log("signTransaction called in provider")
+    
+    if (!window.solflare) {
+      console.error("Solflare not found")
+      throw new Error("Solflare wallet not found")
+    }
+    
+    if (!connected) {
+      console.error("Wallet not connected")
+      throw new Error("Wallet not connected")
+    }
+    
+    try {
+      console.log("Calling solflare.signTransaction")
+      const signedTx = await window.solflare.signTransaction(transaction)
+      console.log("Transaction signed successfully")
+      return signedTx
+    } catch (error) {
+      console.error("Error signing transaction:", error)
+      throw error
+    }
+  }
+
   // Check if Solflare is installed
   useEffect(() => {
     const checkSolflare = () => {
-      setIsSolflareInstalled(!!window.solflare)
+      const isSolflareAvailable = typeof window !== 'undefined' && !!window.solflare
+      console.log("Solflare available:", isSolflareAvailable)
+      setIsSolflareInstalled(isSolflareAvailable)
     }
     
     // Check immediately
@@ -207,18 +237,27 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [connected, address])
 
+  // Create a value object with all the context values
+  const contextValue: WalletContextType = {
+    connected,
+    address,
+    connect: connectSolflare,
+    disconnect,
+    openWalletModal,
+    balance,
+    escrowClient,
+    signTransaction // Make sure this is included
+  }
+
+  // Log the context value to verify signTransaction is included
+  console.log("WalletContext value:", {
+    connected,
+    address,
+    signTransaction: typeof signTransaction === 'function' ? 'function' : 'not a function'
+  })
+
   return (
-    <WalletContext.Provider
-      value={{
-        connected,
-        address,
-        connect: connectSolflare,
-        disconnect,
-        openWalletModal,
-        balance,
-        escrowClient
-      }}
-    >
+    <WalletContext.Provider value={contextValue}>
       {children}
 
       <Dialog open={showWalletModal} onOpenChange={setShowWalletModal}>
@@ -286,7 +325,18 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     </WalletContext.Provider>
   )
 }
-export const useWallet = () => useContext(WalletContext)
+
+export const useWallet = () => {
+  const context = useContext(WalletContext)
+  if (!context) {
+    throw new Error("useWallet must be used within a WalletProvider")
+  }
+  
+  // Log what's in the context when it's used
+  console.log("useWallet called, signTransaction is:", typeof context.signTransaction === 'function' ? 'function' : 'not a function')
+  
+  return context
+}
 
 function SolflareIcon() {
   return (
@@ -303,7 +353,7 @@ function SolflareIcon() {
         d="M73.3 65.8L62.4 76.7C61.9 77.2 61.1 77.2 60.6 76.7L49.7 65.8C49.2 65.3 49.2 64.5 49.7 64L60.6 53.1C61.1 52.6 61.9 52.6 62.4 53.1L73.3 64C73.8 64.5 73.8 65.3 73.3 65.8Z"
         fill="#FFDD6C"
       />
-      <path
+      <path 
         d="M73.3 65.8L62.4 76.7C61.9 77.2 61.1 77.2 60.6 76.7L49.7 65.8C49.2 65.3 49.2 64.5 49.7 64L60.6 53.1C61.1 52.6 61.9 52.6 62.4 53.1L73.3 64C73.8 64.5 73.8 65.3 73.3 65.8Z"
         fill="white"
       />

@@ -9,11 +9,25 @@ import { Textarea } from "@/components/ui/textarea"
 import { ArrowLeft, Info, Shield } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useWallet } from "@/components/wallet-provider"
+import { 
+  PublicKey, 
+  Transaction, 
+  SystemProgram, 
+  Connection, 
+  LAMPORTS_PER_SOL,
+  clusterApiUrl,
+  Keypair
+} from "@solana/web3.js"
 
 export default function NewPayment() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
-  const { connected } = useWallet()
+  const wallet = useWallet()
+  const { connected, address } = wallet
+  const [title, setTitle] = useState("Diseño Gráfico Profesional")
+  const [description, setDescription] = useState("")
+  const [deadline, setDeadline] = useState("")
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   // Redirigir si no está conectado
   useEffect(() => {
@@ -27,18 +41,166 @@ export default function NewPayment() {
     id: "1",
     title: "Diseño Gráfico Profesional",
     freelancer: "Freelancer A",
-    price: "2 SOL",
-    fee: "0.1 SOL",
-    total: "2.1 SOL",
+    price: "0.001 SOL", // Very small amount for testing
+    fee: "0.0001 SOL",
+    total: "0.0011 SOL",
   }
 
-  const handleCreateContract = () => {
+  // Convert SOL string to lamports number
+  const solToLamports = (solString) => {
+    const sol = parseFloat(solString.replace(" SOL", ""))
+    return Math.floor(sol * LAMPORTS_PER_SOL) // 1 SOL = 1 billion lamports
+  }
+
+  const handleCreateContract = async () => {
+    if (!address) {
+      setErrorMessage("Wallet not connected")
+      return
+    }
+    
     setLoading(true)
-    // Simulación de creación de contrato en la blockchain
-    setTimeout(() => {
+    setErrorMessage(null)
+    
+    try {
+      console.log("Starting contract creation process...")
+      
+      // Convert address string to PublicKey
+      const userPublicKey = new PublicKey(address)
+      console.log("User public key:", userPublicKey.toString())
+      
+      // Create a connection to the Solana cluster
+      const connection = new Connection(
+        clusterApiUrl("devnet"),
+        "confirmed"
+      )
+      console.log("Connected to Solana devnet")
+      
+      // Create a new keypair for the escrow account
+      // This will be a regular account that we'll use to hold the funds
+      const escrowAccount = Keypair.generate()
+      console.log("Generated escrow account:", escrowAccount.publicKey.toString())
+      
+      // Calculate the rent exemption amount
+      const rentExemptionAmount = await connection.getMinimumBalanceForRentExemption(0)
+      console.log("Rent exemption amount:", rentExemptionAmount)
+      
+      // Total amount to lock in escrow (in lamports)
+      const paymentAmount = solToLamports(service.total)
+      console.log("Payment amount:", paymentAmount)
+      
+      // Create a simple transaction to transfer SOL to the escrow account
+      const transaction = new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: userPublicKey,
+          toPubkey: escrowAccount.publicKey,
+          lamports: rentExemptionAmount + paymentAmount
+        })
+      )
+      
+      // Get a recent blockhash - always get a fresh one
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("finalized")
+      transaction.recentBlockhash = blockhash
+      transaction.lastValidBlockHeight = lastValidBlockHeight
+      transaction.feePayer = userPublicKey
+      
+      console.log("About to sign transaction with wallet")
+      
+      // Sign with the user's wallet
+      let signedTransaction
+      try {
+        if (window.solflare && typeof window.solflare.signTransaction === 'function') {
+          signedTransaction = await window.solflare.signTransaction(transaction)
+          console.log("Transaction signed with Solflare")
+        } else {
+          throw new Error("Solflare wallet not available")
+        }
+      } catch (signError) {
+        console.error("Error signing transaction:", signError)
+        setErrorMessage(`Error signing transaction: ${signError.message || JSON.stringify(signError)}`)
+        throw signError
+      }
+      
+      // Send the transaction
+      console.log("Sending transaction...")
+      const signature = await connection.sendRawTransaction(
+        signedTransaction.serialize(),
+        { 
+          skipPreflight: false,
+          preflightCommitment: "confirmed",
+          maxRetries: 3
+        }
+      )
+      console.log("Transaction sent, signature:", signature)
+      
+      // Wait for confirmation
+      console.log("Waiting for confirmation...")
+      const confirmation = await connection.confirmTransaction({
+        blockhash,
+        lastValidBlockHeight,
+        signature
+      }, "confirmed")
+      
+      if (confirmation.value.err) {
+        throw new Error(`Transaction failed: ${JSON.stringify(confirmation.value.err)}`)
+      }
+      
+      console.log("Transaction confirmed:", confirmation)
+      
+      // Generate a contract reference
+      const contractRef = `CONTRACT-${Date.now().toString(36).toUpperCase()}`
+      
+      // Store contract details (in a real app, you'd store this in a database)
+      const contractDetails = {
+        id: contractRef,
+        title: title,
+        description: description,
+        deadline: deadline,
+        amount: service.total,
+        transactionSignature: signature,
+        escrowAccount: escrowAccount.publicKey.toString(),
+        escrowPrivateKey: Array.from(escrowAccount.secretKey), // Save this securely in a real app!
+        clientAccount: address,
+        freelancerAccount: "FREELANCER_PUBKEY", // Replace with actual freelancer pubkey
+        status: "active",
+        createdAt: new Date().toISOString(),
+      }
+      
+      // In a real app, you would save this to your backend
+      console.log("Contract created:", contractDetails)
+      
+      // For demo purposes, save the escrow account's private key to localStorage
+      // WARNING: This is NOT secure and should NOT be done in a production app!
+      // In a real app, you would store this securely on your backend
+      localStorage.setItem(`escrow_${contractRef}`, JSON.stringify({
+        publicKey: escrowAccount.publicKey.toString(),
+        secretKey: Array.from(escrowAccount.secretKey),
+      }))
+      
+      // Redirect to the contract page
+      router.push(`/contract/${contractRef}?escrow=${escrowAccount.publicKey.toString()}&tx=${signature}`)
+      
+    } catch (error) {
+      console.error("Error creating contract:", error)
+      
+      // Create a detailed error message
+      let detailedError = "Unknown error occurred";
+      
+      if (error instanceof Error) {
+        detailedError = error.message;
+      } else if (typeof error === 'string') {
+        detailedError = error;
+      } else {
+        try {
+          detailedError = JSON.stringify(error);
+        } catch (e) {
+          detailedError = "Error cannot be stringified";
+        }
+      }
+      
+      setErrorMessage(`Error creating contract: ${detailedError}`);
+    } finally {
       setLoading(false)
-      router.push("/contract/123")
-    }, 2000)
+    }
   }
 
   if (!connected) {
@@ -59,6 +221,13 @@ export default function NewPayment() {
         <h1 className="text-2xl font-bold">Crear nuevo contrato</h1>
       </div>
 
+      {errorMessage && (
+        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+          <h4 className="font-medium mb-1">Error</h4>
+          <p className="text-sm whitespace-pre-wrap">{errorMessage}</p>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
           <Card>
@@ -70,18 +239,33 @@ export default function NewPayment() {
             <CardContent className="space-y-6">
               <div className="space-y-2">
                 <Label htmlFor="title">Título del proyecto</Label>
-                <Input id="title" defaultValue={service.title} />
+                <Input 
+                  id="title" 
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="description">Descripción detallada</Label>
-                <Textarea id="description" placeholder="Describe detalladamente lo que necesitas..." rows={5} />
+                <Textarea 
+                  id="description" 
+                  placeholder="Describe detalladamente lo que necesitas..." 
+                  rows={5}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                />
                 <p className="text-xs text-gray-500">Sé específico sobre tus requisitos, plazos y expectativas.</p>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="deadline">Fecha límite</Label>
-                <Input id="deadline" type="date" />
+                <Input 
+                  id="deadline" 
+                  type="date"
+                  value={deadline}
+                  onChange={(e) => setDeadline(e.target.value)}
+                />
               </div>
 
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex flex-col sm:flex-row">
