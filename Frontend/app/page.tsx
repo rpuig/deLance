@@ -1,7 +1,7 @@
-import { Button } from "@/components/ui/button"
-import { ArrowRight } from "lucide-react"
+import { Button } from "../components/ui/button"
+// Remove this import
+// import { ArrowRight } from "lucide-react"
 import Link from "next/link"
-import Image from "next/image"
 
 export default function Home() {
   return (
@@ -22,19 +22,19 @@ export default function Home() {
               <div className="flex flex-col gap-2 min-[400px]:flex-row">
                 <Link href="/connect">
                   <Button className="bg-solana-purple hover:bg-solana-purple/90">
-                    Conectar Wallet <ArrowRight className="ml-2 h-4 w-4" />
+                    Conectar Wallet →
+                    {/* Replace the ArrowRight component with a simple arrow character */}
                   </Button>
                 </Link>
               </div>
             </div>
             <div className="mx-auto lg:mr-0 flex items-center justify-center">
-              <Image
+              <img
                 src="/images/crypto-freelancer.png"
                 alt="deLance - Freelancer en Solana"
                 className="rounded-lg object-cover shadow-xl"
                 width={500}
                 height={400}
-                priority
               />
             </div>
           </div>

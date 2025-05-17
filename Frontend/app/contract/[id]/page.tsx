@@ -8,6 +8,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { ArrowLeft, CheckCircle, Clock, FileText, MessageSquare, Send, Star } from "lucide-react"
 import { useParams, useRouter } from "next/navigation"
 import { useWallet } from "@/components/wallet-provider"
+// Import necessary Solana web3.js libraries
+import { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } from '@solana/web3.js';
 
 export default function ContractDetail() {
   const params = useParams()
@@ -16,14 +18,72 @@ export default function ContractDetail() {
   const [message, setMessage] = useState("")
   const [showRating, setShowRating] = useState(false)
   const [rating, setRating] = useState(0)
-  const { connected } = useWallet()
+  const wallet = useWallet()  // Get the wallet object
+  const [isProcessing, setIsProcessing] = useState(false)
+  const [transactionStatus, setTransactionStatus] = useState("")
+  const [walletInfo, setWalletInfo] = useState({
+    yourWallet: "Not connected",
+    yourBalance: 0,
+    freelancerWallet: "8Xo95kP4KoqDP7GByLgZssBf58kxMy5ndSw9LzieHMjm",
+    role: "client" // You are the client in this scenario
+  }) 
+  const [transactionComplete, setTransactionComplete] = useState(false)
+  const [transactionSignature, setTransactionSignature] = useState("")
+
+  // Expose wallet to window for debugging - ONLY on client side
+  useEffect(() => {
+    // This code only runs in the browser, after component mount
+    // @ts-ignore
+    window._wallet = wallet;
+    console.log("Wallet exposed as window._wallet");
+  }, [wallet]);
+
+  // Get your wallet address and balance
+  useEffect(() => {
+    const getWalletInfo = async () => {
+      if (wallet && wallet.connected && wallet.address) {
+        try {
+          // Get your wallet address
+          const yourWalletAddress = wallet.address;
+          
+          // Get your wallet balance (already available in wallet.balance)
+          const balanceInSOL = parseFloat(wallet.balance || "0");
+          
+          setWalletInfo(prev => ({
+            ...prev,
+            yourWallet: yourWalletAddress,
+            yourBalance: balanceInSOL
+          }));
+          
+          console.log("Your wallet:", yourWalletAddress);
+          console.log("Your balance:", balanceInSOL, "SOL");
+        } catch (error) {
+          console.error("Error getting wallet info:", error);
+        }
+      }
+    };
+    
+    getWalletInfo();
+  }, [wallet]);
 
   // Redirigir si no está conectado
   useEffect(() => {
-    if (!connected) {
+    if (!wallet || !wallet.connected) {
       router.push("/connect")
     }
-  }, [connected, router])
+  }, [wallet, router])
+
+  // Redirect after transaction is complete (with a delay for user to see the success message)
+  useEffect(() => {
+    if (transactionComplete && transactionSignature) {
+      const timer = setTimeout(() => {
+        // Redirect to dashboard or success page
+        router.push("/client/dashboard");
+      }, 3000); // 3 second delay
+      
+      return () => clearTimeout(timer);
+    }
+  }, [transactionComplete, transactionSignature, router]);
 
   // Datos de ejemplo - en una implementación real, estos datos vendrían de la blockchain o una API
   const contract = {
@@ -32,8 +92,10 @@ export default function ContractDetail() {
     description:
       "Diseño de logo profesional para una startup de tecnología, incluyendo 3 propuestas y 2 rondas de revisiones.",
     freelancer: "Freelancer A",
-    client: "Cliente B",
-    price: "2 SOL",
+    freelancerWallet: walletInfo.freelancerWallet, // Freelancer's wallet address
+    client: "Cliente B (Tú)",
+    price: "0.01 SOL", // Reduced for testing
+    priceInLamports: 0.01 * LAMPORTS_PER_SOL, // 0.01 SOL in lamports for testing
     status: "En progreso", // En progreso, Entregado, Validado, Completado
     createdAt: "01/06/2025",
     dueDate: "15/06/2025",
@@ -41,7 +103,7 @@ export default function ContractDetail() {
     messages: [
       {
         id: 1,
-        sender: "Cliente B",
+        sender: "Cliente B (Tú)",
         content: "Hola, necesito un logo minimalista y moderno.",
         timestamp: "01/06/2025 10:30",
       },
@@ -53,7 +115,7 @@ export default function ContractDetail() {
       },
       {
         id: 3,
-        sender: "Cliente B",
+        sender: "Cliente B (Tú)",
         content: "Me gustaría usar tonos azules y verdes, representan bien nuestra marca.",
         timestamp: "01/06/2025 12:00",
       },
@@ -67,9 +129,106 @@ export default function ContractDetail() {
     }
   }
 
-  const handleDeliverWork = () => {
-    // En una implementación real, aquí marcaríamos el trabajo como entregado en la blockchain
-    alert("Trabajo marcado como entregado. El cliente debe validarlo para liberar el pago.")
+  const handleDeliverWork = async () => {
+    console.log("Starting handleDeliverWork function");
+    
+    if (!wallet || !wallet.connected) {
+      alert("Por favor, conecta tu wallet para realizar esta acción.");
+      return;
+    }
+    
+    if (!wallet.address) {
+      alert("No se pudo obtener la dirección de tu wallet.");
+      console.error("Address not found in wallet object:", wallet);
+      return;
+    }
+    
+    setIsProcessing(true);
+    setTransactionStatus("Preparando transacción...");
+
+    try {
+      // Connect to Solana devnet for testing
+      const connection = new Connection('https://api.devnet.solana.com', 'confirmed');
+      console.log("Connected to Solana devnet");
+      
+      // Your wallet (client) - this is the wallet connected to Solflare
+      const clientWallet = new PublicKey(wallet.address);
+      console.log("Client wallet (YOU):", clientWallet.toString());
+      
+      // Freelancer's wallet address (hardcoded for testing)
+      const freelancerWallet = new PublicKey(contract.freelancerWallet);
+      console.log("Freelancer wallet:", freelancerWallet.toString());
+      
+      // Check balance before transaction
+      const balance = parseFloat(wallet.balance || "0") * LAMPORTS_PER_SOL;
+      console.log("Your wallet balance:", balance / LAMPORTS_PER_SOL, "SOL");
+      
+      if (balance < contract.priceInLamports) {
+        throw new Error(`Saldo insuficiente. Necesitas al menos ${contract.priceInLamports / LAMPORTS_PER_SOL} SOL.`);
+      }
+      
+      // Create a transaction to transfer SOL from client (you) to freelancer
+      const transaction = new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: clientWallet,  // Your wallet (client)
+          toPubkey: freelancerWallet, // Freelancer's wallet
+          lamports: contract.priceInLamports,
+        })
+      );
+      
+      console.log("Transaction created: Sending", contract.priceInLamports / LAMPORTS_PER_SOL, "SOL from", 
+                  clientWallet.toString(), "to", freelancerWallet.toString());
+      
+      // Set recent blockhash and fee payer
+      const { blockhash } = await connection.getLatestBlockhash();
+      transaction.recentBlockhash = blockhash;
+      transaction.feePayer = clientWallet;
+      
+      setTransactionStatus("Esperando firma del usuario (tú)...");
+      
+      // Sign the transaction using your wallet (client)
+      console.log("Requesting signature from your wallet...");
+      const signedTransaction = await wallet.signTransaction(transaction);
+      console.log("Transaction signed by client");
+      
+      setTransactionStatus("Enviando transacción a la blockchain...");
+      
+      // Send the transaction
+      const signature = await connection.sendRawTransaction(signedTransaction.serialize());
+      console.log("Transaction sent with signature:", signature);
+      
+      // Store the transaction signature for the redirect
+      setTransactionSignature(signature);
+      
+      // Wait for confirmation
+      const confirmation = await connection.confirmTransaction(signature, 'confirmed');
+      console.log("Transaction confirmation:", confirmation);
+      
+      if (confirmation.value && confirmation.value.err) {
+        throw new Error(`Error en la confirmación: ${JSON.stringify(confirmation.value.err)}`);
+      }
+      
+      setTransactionStatus("¡Transacción completada! Fondos enviados al freelancer.");
+      
+      // Update wallet balance after transaction (in a real app, you'd refresh the balance)
+      setWalletInfo(prev => ({
+        ...prev,
+        yourBalance: parseFloat(wallet.balance || "0") - (contract.priceInLamports / LAMPORTS_PER_SOL)
+      }));
+      
+      // Mark transaction as complete to trigger redirect
+      setTransactionComplete(true);
+      
+      // Show success message before redirect
+      alert("¡Trabajo marcado como entregado y fondos enviados al freelancer! Serás redirigido en unos segundos.");
+      
+    } catch (error) {
+      console.error("Error al procesar la transacción:", error);
+      setTransactionStatus(`Error: ${error.message}`);
+      alert(`Error al liberar los fondos: ${error.message}`);
+    } finally {
+      setIsProcessing(false);
+    }
   }
 
   const handleValidateWork = () => {
@@ -80,14 +239,79 @@ export default function ContractDetail() {
   const handleSubmitRating = () => {
     // En una implementación real, aquí enviaríamos la valoración a la blockchain
     alert("¡Trabajo validado y pago liberado! Gracias por tu valoración.")
+    // Redirect to dashboard after rating
+    router.push("/client/dashboard");
   }
 
-  if (!connected) {
-    return null // No renderizar nada mientras redirige
+  // Check if wallet is connected before rendering
+  if (!wallet || !wallet.connected) {
+    return (
+      <div className="container py-8 px-4">
+        <div className="text-center">
+          <p>Por favor, conecta tu wallet para ver los detalles del contrato.</p>
+          <Button 
+            className="mt-4 bg-solana-purple hover:bg-solana-purple/90"
+            onClick={() => router.push("/connect")}
+          >
+            Conectar Wallet
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  // If transaction is complete, show a success message while redirecting
+  if (transactionComplete) {
+    return (
+      <div className="container py-8 px-4">
+        <div className="text-center">
+          <div className="mb-4 text-green-500">
+            <CheckCircle className="h-16 w-16 mx-auto" />
+          </div>
+          <h2 className="text-2xl font-bold mb-2">¡Transacción Completada!</h2>
+          <p className="mb-4">Los fondos han sido enviados al freelancer correctamente.</p>
+          <p className="text-sm text-gray-500 mb-6">Serás redirigido en unos segundos...</p>
+          <div className="text-xs text-gray-400 break-all mb-4">
+            Firma de transacción: {transactionSignature}
+          </div>
+          <Button 
+            className="bg-solana-purple hover:bg-solana-purple/90"
+            onClick={() => router.push("/client/dashboard")}
+          >
+            Ir al Dashboard
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="container py-8 px-4">
+      {/* Wallet information panel */}
+      <div className="mb-4 p-4 bg-gray-50 border rounded-lg">
+        <h3 className="text-lg font-medium mb-2">Información de Wallets</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="p-3 bg-blue-50 rounded-md">
+            <p className="font-medium">Tu Wallet (Cliente):</p>
+            <p className="text-xs break-all">{walletInfo.yourWallet}</p>
+            <p className="mt-1">Balance: {walletInfo.yourBalance.toFixed(4)} SOL</p>
+          </div>
+          <div className="p-3 bg-green-50 rounded-md">
+            <p className="font-medium">Wallet del Freelancer:</p>
+            <p className="text-xs break-all">{walletInfo.freelancerWallet}</p>
+            <p className="mt-1 text-sm text-gray-500">
+              (El pago se enviará a esta dirección)
+            </p>
+          </div>
+        </div>
+        <div className="mt-3 text-sm text-gray-500">
+          <p>
+            <strong>Nota:</strong> Al marcar el trabajo como entregado, se transferirán {contract.price} desde tu wallet 
+            a la wallet del freelancer.
+          </p>
+        </div>
+      </div>
+      
       <div className="mb-4">
         <Button
           variant="ghost"
@@ -157,6 +381,16 @@ export default function ContractDetail() {
                 <Progress value={contract.progress} className="h-2" />
               </div>
 
+              {isProcessing && (
+                <div className="border rounded-lg p-4 bg-blue-50">
+                  <h3 className="font-medium mb-2">Procesando transacción</h3>
+                  <Progress value={transactionStatus.includes("Error") ? 100 : 70} className="h-2 mb-2" />
+                  <p className={`text-sm ${transactionStatus.includes("Error") ? "text-red-500" : "text-blue-600"}`}>
+                    {transactionStatus}
+                  </p>
+                </div>
+              )}
+
               {showRating ? (
                 <div className="border rounded-lg p-4">
                   <h3 className="font-medium mb-4">Valora el trabajo recibido</h3>
@@ -183,8 +417,12 @@ export default function ContractDetail() {
               ) : (
                 <div className="flex justify-end">
                   {contract.status === "En progreso" && (
-                    <Button className="bg-solana-purple hover:bg-solana-purple/90" onClick={handleDeliverWork}>
-                      Marcar como entregado
+                    <Button 
+                      className="bg-solana-purple hover:bg-solana-purple/90" 
+                      onClick={handleDeliverWork}
+                      disabled={isProcessing}
+                    >
+                      {isProcessing ? "Procesando..." : "Marcar como entregado y liberar fondos"}
                     </Button>
                   )}
 
@@ -210,7 +448,7 @@ export default function ContractDetail() {
             <CardContent className="flex-grow overflow-auto">
               <div className="space-y-4">
                 {contract.messages.map((msg) => (
-                  <div key={msg.id} className="flex flex-col">
+                  <div key={msg.id}  className="flex flex-col">
                     <div className="flex justify-between items-center mb-1">
                       <span className="font-medium">{msg.sender}</span>
                       <span className="text-xs text-gray-500">{msg.timestamp}</span>

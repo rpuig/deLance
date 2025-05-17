@@ -5,6 +5,9 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { WalletProvider } from "@/components/wallet-provider"
 import { SiteLayout } from "@/components/site-layout"
 
+
+
+
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata = {
